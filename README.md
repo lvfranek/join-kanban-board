@@ -2,6 +2,8 @@
 
 A task manager inspired by the Kanban system. Create and organize tasks using drag and drop, assign users and categories to keep your team aligned and productive.
 
+![Join Kanban Board](public/join.png)
+
 ## ⌨️ Technologies
 
 - `Angular`
