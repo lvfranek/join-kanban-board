@@ -4,7 +4,7 @@ A task manager inspired by the Kanban system. Create and organize tasks using dr
 
 ![Join Kanban Board](public/join.png)
 
-## ⌨️ Technologies
+## ⌨️ Tech Stack
 
 - `Angular`
 - `TypeScript`
@@ -23,7 +23,7 @@ A task manager inspired by the Kanban system. Create and organize tasks using dr
 
 [join-phi-lemon.vercel.app](https://join-phi-lemon.vercel.app/)
 
-## 🚦 Running the Project
+## 🚦 Getting Started
 
 This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.7.
 
