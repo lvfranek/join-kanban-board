@@ -9,7 +9,7 @@ A task manager inspired by the Kanban system. Create and organize tasks using dr
 - [Tech Stack](#tech-stack)
 - [Features](#features)
 - [Live Demo](#live-demo)
-- [⚙️ Installation](#️-installation)
+- [Installation](#️-installation)
 - [Environment Variables](#environment-variables)
 - [Available Scripts](#available-scripts)
 - [Architecture](#architecture)
