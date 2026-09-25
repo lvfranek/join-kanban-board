@@ -1,7 +1,10 @@
+import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 
+import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
-import { SupabaseService } from './supabase.service';
+
 
 export interface ContactRecord {
   id: string;
@@ -78,12 +81,13 @@ const GUEST_SEED: ContactRecord[] = [
   },
 ];
 
+type ContactResponse = Omit<ContactRecord, 'id'> & { id: number };
+
 @Injectable({ providedIn: 'root' })
 export class ContactService {
-  private readonly supabase = inject(SupabaseService);
+  private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
-  private readonly table = 'contacts';
-  private readonly columns = 'id, first_name, last_name, email, phone';
+  private readonly baseUrl = `${environment.apiUrl}/contacts/`;
 
   private readonly contactsState = signal<ContactRecord[]>([]);
   private readonly loadedState = signal(false);
@@ -138,13 +142,7 @@ export class ContactService {
 
     this.inflight = (async () => {
       try {
-        const { data, error } = await this.supabase.client
-          .from(this.table)
-          .select(this.columns)
-          .order('first_name', { ascending: true });
-
-        if (error) throw error;
-        let records = (data ?? []) as ContactRecord[];
+        let records = await this.fetchAll();
 
         // Seed initial demo contacts on first login so registered users
         // see the same starter data as guests do.
@@ -173,17 +171,8 @@ export class ContactService {
       return record;
     }
 
-    const { data: userResult } = await this.supabase.client.auth.getUser();
-    const createdBy = userResult.user?.id ?? null;
-
-    const { data, error } = await this.supabase.client
-      .from(this.table)
-      .insert({ ...contact, created_by: createdBy })
-      .select(this.columns)
-      .single();
-
-    if (error) throw error;
-    const record = data as ContactRecord;
+    const data = await firstValueFrom(this.http.post<ContactResponse>(this.baseUrl, contact));
+    const record = this.toRecord(data);
     this.contactsState.update((list) =>
       [...list, record].sort((a, b) => a.first_name.localeCompare(b.first_name)),
     );
@@ -208,15 +197,10 @@ export class ContactService {
       return updated;
     }
 
-    const { data, error } = await this.supabase.client
-      .from(this.table)
-      .update(patch)
-      .eq('id', id)
-      .select(this.columns)
-      .single();
-
-    if (error) throw error;
-    const record = data as ContactRecord;
+    const data = await firstValueFrom(
+      this.http.patch<ContactResponse>(`${this.baseUrl}${id}/`, patch),
+    );
+    const record = this.toRecord(data);
     this.contactsState.update((list) => list.map((entry) => (entry.id === id ? record : entry)));
     return record;
   }
@@ -231,18 +215,7 @@ export class ContactService {
       return;
     }
 
-    const { data, error } = await this.supabase.client
-      .from(this.table)
-      .delete()
-      .eq('id', id)
-      .select('id');
-
-    if (error) throw error;
-    if (!data || data.length === 0) {
-      throw new Error(
-        `Contact ${id} could not be deleted. Likely missing RLS DELETE policy or the row no longer exists.`,
-      );
-    }
+    await firstValueFrom(this.http.delete<void>(`${this.baseUrl}${id}/`));
     this.contactsState.update((list) => list.filter((entry) => entry.id !== id));
   }
 
@@ -262,52 +235,39 @@ export class ContactService {
     const fullName =
       [newFirst, newLast].filter(Boolean).join(' ').trim() || patch.first_name || current.name;
 
+    // Only updates the local state for now; there is no profile endpoint in Django yet.
     this.auth.updateCurrentUser({
       name: fullName,
       email: patch.email ?? current.email,
       phone: patch.phone ?? current.phone,
     });
 
-    if (!this.auth.isGuest()) {
-      // Best-effort persistence: update Supabase auth metadata + users table.
-      try {
-        await this.supabase.client.auth.updateUser({
-          data: { full_name: fullName, phone: patch.phone ?? current.phone },
-          ...(patch.email && patch.email !== current.email ? { email: patch.email } : {}),
-        });
-        await this.supabase.client
-          .from('users')
-          .update({
-            full_name: fullName,
-            email: patch.email ?? current.email,
-          })
-          .eq('id', current.id);
-      } catch (err) {
-        console.warn('Profile update could not be persisted', err);
-      }
-    }
-
     return this.selfContact()!;
+  }
+
+  private async fetchAll(): Promise<ContactRecord[]> {
+    const data = await firstValueFrom(this.http.get<ContactResponse[]>(this.baseUrl));
+    return data.map((contact) => this.toRecord(contact));
   }
 
   private async seedInitialContacts(): Promise<ContactRecord[]> {
     try {
-      const { data: userResult } = await this.supabase.client.auth.getUser();
-      const createdBy = userResult.user?.id ?? null;
-      const seedPayload = GUEST_SEED.map(({ id: _omit, ...rest }) => ({
-        ...rest,
-        created_by: createdBy,
-      }));
-      const { data, error } = await this.supabase.client
-        .from(this.table)
-        .insert(seedPayload)
-        .select(this.columns);
-      if (error) throw error;
-      return (data ?? []) as ContactRecord[];
+      const created = await Promise.all(
+        GUEST_SEED.map(({ id: _omit, ...rest }) =>
+          firstValueFrom(this.http.post<ContactResponse>(this.baseUrl, rest)),
+        ),
+      );
+      return created
+        .map((contact) => this.toRecord(contact))
+        .sort((a, b) => a.first_name.localeCompare(b.first_name));
     } catch (err) {
       console.warn('Could not seed initial contacts', err);
       return [...GUEST_SEED];
     }
+  }
+
+  private toRecord(data: ContactResponse): ContactRecord {
+    return { ...data, id: String(data.id) };
   }
 
   private generateLocalId(): string {
