@@ -1,7 +1,10 @@
+import { HttpClient } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 
+import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
-import { SupabaseService } from './supabase.service';
+
 
 export type TaskPriority = 'urgent' | 'medium' | 'low';
 export type TaskStatus = 'todo' | 'inProgress' | 'awaitFeedback' | 'done';
@@ -47,18 +50,8 @@ export interface TaskUpdate {
   subtasks?: string[];
 }
 
-type TaskRow = {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string | null;
-  priority: string | null;
-  due_date?: string | null;
-  category?: string | null;
-  assignees?: TaskAssignee[] | null;
-  subtasks?: string[] | null;
-  assigned_to?: string | null;
-};
+type TaskResponse = Omit<TaskRecord, 'id' | 'dueDate'> & { id: number; dueDate: string | null };
+
 
 const BRUCE: TaskAssignee = {
   id: 'guest-1',
@@ -184,10 +177,10 @@ const GUEST_TASKS: TaskRecord[] = [
 
 @Injectable({ providedIn: 'root' })
 export class TaskService {
-  private readonly supabase = inject(SupabaseService);
+  private readonly http = inject(HttpClient);
   private readonly auth = inject(AuthService);
+  private readonly baseUrl = `${environment.apiUrl}/tasks/`;
 
-  private readonly table = 'tasks';
   private readonly tasksState = signal<TaskRecord[]>([]);
   private readonly loadedState = signal(false);
   private inflight: Promise<TaskRecord[]> | null = null;
@@ -219,16 +212,8 @@ export class TaskService {
 
     this.inflight = (async () => {
       try {
-        const { data, error } = await this.supabase.client
-          .from(this.table)
-          .select('*')
-          .order('created_at', { ascending: true });
-
-        if (error) {
-          throw error;
-        }
-
-        let records = ((data ?? []) as TaskRow[]).map((row) => this.fromRow(row));
+        const data = await firstValueFrom(this.http.get<TaskResponse[]>(this.baseUrl));
+        let records = data.map((task) => this.fromResponse(task));
 
         // Seed initial demo tasks on first login so registered users
         // see the same starter data as guests do.
@@ -358,194 +343,59 @@ export class TaskService {
   }
 
   private async persistCreate(task: TaskRecord): Promise<void> {
-    const { data: userResult } = await this.supabase.client.auth.getUser();
-    const userId = userResult.user?.id ?? null;
-
-    const fullPayload = {
-      title: task.title,
-      description: task.description,
-      status: this.toDbStatus(task.status),
-      priority: this.toDbPriority(task.priority),
-      due_date: this.toDbDate(task.dueDate),
-      category: task.category,
-      assignees: task.assignees,
-      subtasks: task.subtasks,
-      assigned_to: task.assignees[0]?.id ?? null,
-      created_by: userId,
-    };
-
-    const { data, error } = await this.supabase.client
-      .from(this.table)
-      .insert(fullPayload)
-      .select('*')
-      .single();
-
-    if (error) {
-      if (this.isMissingColumnError(error)) {
-        await this.persistLegacyCreate(task, userId);
-        return;
-      }
-
-      console.error('Failed to persist task creation', error);
-      return;
+    try {
+      const data = await firstValueFrom(
+        this.http.post<TaskResponse>(this.baseUrl, this.toPayload(task)),
+      );
+      const persisted = this.fromResponse(data);
+      this.tasksState.update((tasks) =>
+        tasks.map((entry) => (entry.id === task.id ? persisted : entry)),
+      );
+    } catch (err) {
+      console.error('Failed to persist task creation', err);
     }
-
-    const persisted = this.fromRow(data as TaskRow);
-    this.tasksState.update((tasks) =>
-      tasks.map((entry) => (entry.id === task.id ? persisted : entry)),
-    );
-  }
-
-  private async persistLegacyCreate(task: TaskRecord, userId: string | null): Promise<void> {
-    const legacyPayload = {
-      title: task.title,
-      description: task.description,
-      status: this.toDbStatus(task.status),
-      priority: this.toDbPriority(task.priority),
-      assigned_to: task.assignees[0]?.id ?? null,
-      created_by: userId,
-    };
-
-    const { data, error } = await this.supabase.client
-      .from(this.table)
-      .insert(legacyPayload)
-      .select('*')
-      .single();
-
-    if (error) {
-      console.error('Failed to persist task creation (legacy fallback)', error);
-      return;
-    }
-
-    const persisted = this.fromRow(data as TaskRow);
-    this.tasksState.update((tasks) =>
-      tasks.map((entry) => (entry.id === task.id ? persisted : entry)),
-    );
   }
 
   private async persistUpdate(taskId: string, task: TaskRecord): Promise<void> {
-    const fullPatch = {
-      title: task.title,
-      description: task.description,
-      status: this.toDbStatus(task.status),
-      priority: this.toDbPriority(task.priority),
-      due_date: this.toDbDate(task.dueDate),
-      category: task.category,
-      assignees: task.assignees,
-      subtasks: task.subtasks,
-      assigned_to: task.assignees[0]?.id ?? null,
-    };
-
-    const { error } = await this.supabase.client
-      .from(this.table)
-      .update(fullPatch)
-      .eq('id', taskId);
-
-    if (!error) {
-      return;
-    }
-
-    if (!this.isMissingColumnError(error)) {
-      console.error('Failed to persist task update', error);
-      return;
-    }
-
-    const legacyPatch = {
-      title: task.title,
-      description: task.description,
-      status: this.toDbStatus(task.status),
-      priority: this.toDbPriority(task.priority),
-      assigned_to: task.assignees[0]?.id ?? null,
-    };
-
-    const { error: legacyError } = await this.supabase.client
-      .from(this.table)
-      .update(legacyPatch)
-      .eq('id', taskId);
-
-    if (legacyError) {
-      console.error('Failed to persist task update (legacy fallback)', legacyError);
+    try {
+      await firstValueFrom(this.http.patch(`${this.baseUrl}${taskId}/`, this.toPayload(task)));
+    } catch (err) {
+      console.error('Failed to persist task update', err);
     }
   }
 
   private async persistDelete(taskId: string): Promise<void> {
-    const { error } = await this.supabase.client.from(this.table).delete().eq('id', taskId);
-
-    if (error) {
-      console.error('Failed to persist task deletion', error);
+    try {
+      await firstValueFrom(this.http.delete(`${this.baseUrl}${taskId}/`));
+    } catch (err) {
+      console.error('Failed to persist task deletion', err);
     }
   }
 
-  private fromRow(row: TaskRow): TaskRecord {
+  private toPayload(task: TaskRecord) {
     return {
-      id: row.id,
-      title: row.title,
-      description: row.description ?? '',
-      status: this.fromDbStatus(row.status),
-      priority: this.fromDbPriority(row.priority),
-      dueDate: row.due_date ?? '',
-      category: row.category ?? 'Technical Task',
-      assignees: row.assignees ?? [],
-      subtasks: row.subtasks ?? [],
+      title: task.title,
+      description: task.description,
+      status: task.status,
+      priority: task.priority,
+      dueDate: this.toApiDate(task.dueDate),
+      category: task.category,
+      assignees: task.assignees,
+      subtasks: task.subtasks,
     };
   }
 
-  private toDbStatus(status: TaskStatus): string {
-    if (status === 'inProgress') {
-      return 'in-progress';
-    }
-
-    if (status === 'awaitFeedback') {
-      return 'await-feedback';
-    }
-
-    return status;
+  private fromResponse(data: TaskResponse): TaskRecord {
+    return {
+      ...data,
+      id: String(data.id),
+      dueDate: data.dueDate ?? '',
+    };
   }
 
-  private fromDbStatus(status: string | null): TaskStatus {
-    if (status === 'in-progress' || status === 'inProgress') {
-      return 'inProgress';
-    }
-
-    if (status === 'await-feedback' || status === 'awaitFeedback') {
-      return 'awaitFeedback';
-    }
-
-    if (status === 'done') {
-      return 'done';
-    }
-
-    return 'todo';
-  }
-
-  private toDbPriority(priority: TaskPriority): string {
-    if (priority === 'urgent') {
-      return 'high';
-    }
-
-    return priority;
-  }
-
-  private fromDbPriority(priority: string | null): TaskPriority {
-    if (priority === 'high' || priority === 'urgent') {
-      return 'urgent';
-    }
-
-    if (priority === 'low') {
-      return 'low';
-    }
-
-    return 'medium';
-  }
-
-  private toDbDate(dateValue: string): string | null {
+  private toApiDate(dateValue: string): string | null {
     const normalized = dateValue.trim();
     return /^\d{4}-\d{2}-\d{2}$/.test(normalized) ? normalized : null;
-  }
-
-  private isMissingColumnError(error: { message?: string }): boolean {
-    const message = (error.message ?? '').toLowerCase();
-    return message.includes('column') && message.includes('does not exist');
   }
 
   private generateLocalId(): string {
@@ -554,29 +404,12 @@ export class TaskService {
 
   private async seedInitialTasks(): Promise<TaskRecord[]> {
     try {
-      const { data: userResult } = await this.supabase.client.auth.getUser();
-      const userId = userResult.user?.id ?? null;
-
-      const payload = GUEST_TASKS.map((task) => ({
-        title: task.title,
-        description: task.description,
-        status: this.toDbStatus(task.status),
-        priority: this.toDbPriority(task.priority),
-        due_date: this.toDbDate(task.dueDate),
-        category: task.category,
-        assignees: task.assignees,
-        subtasks: task.subtasks,
-        assigned_to: task.assignees[0]?.id ?? null,
-        created_by: userId,
-      }));
-
-      const { data, error } = await this.supabase.client
-        .from(this.table)
-        .insert(payload)
-        .select('*');
-
-      if (error) throw error;
-      return ((data ?? []) as TaskRow[]).map((row) => this.fromRow(row));
+      const created = await Promise.all(
+        GUEST_TASKS.map((task) =>
+          firstValueFrom(this.http.post<TaskResponse>(this.baseUrl, this.toPayload(task))),
+        ),
+      );
+      return created.map((task) => this.fromResponse(task));
     } catch (err) {
       console.warn('Could not seed initial tasks; falling back to in-memory demo data', err);
       // Fallback: at least show the demo data in-memory so the user does not
