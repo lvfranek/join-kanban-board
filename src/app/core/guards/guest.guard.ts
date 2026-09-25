@@ -1,20 +1,17 @@
 import { inject } from '@angular/core';
 import { CanMatchFn, Router } from '@angular/router';
 
+import { AuthApiService } from '../services/auth-api.service';
 import { AuthService } from '../services/auth.service';
-import { SupabaseService } from '../services/supabase.service';
 
 export const guestGuard: CanMatchFn = () => {
   const auth = inject(AuthService);
+  const authApi = inject(AuthApiService);
   const router = inject(Router);
-  const supabase = inject(SupabaseService);
 
   if (auth.isAuthenticated()) {
     return router.parseUrl('/summary');
   }
 
-  return supabase.client.auth.getSession().then(({ data }) => {
-    const hasSession = !!data.session;
-    return auth.syncFromSession(hasSession) ? router.parseUrl('/summary') : true;
-  });
+  return authApi.restoreSession().then((loggedIn) => (loggedIn ? router.parseUrl('/summary') : true));
 };

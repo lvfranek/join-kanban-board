@@ -12,6 +12,7 @@ import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import { filter } from 'rxjs/operators';
 
 import { AuthService } from '../../core/services/auth.service';
+import { AuthApiService } from '../../core/services/auth-api.service';
 import { ContactService } from '../../core/services/contact.service';
 import { SupabaseService } from '../../core/services/supabase.service';
 import { TaskService } from '../../core/services/task.service';
@@ -48,6 +49,7 @@ export class ShellLayout implements OnDestroy {
 
   protected readonly router = inject(Router);
   private readonly auth = inject(AuthService);
+  private readonly authApi = inject(AuthApiService);
   private readonly supabase = inject(SupabaseService);
   private readonly contactService = inject(ContactService);
   private readonly taskService = inject(TaskService);
@@ -138,25 +140,13 @@ export class ShellLayout implements OnDestroy {
   }
 
   private async syncAuthState(): Promise<void> {
-    const { data } = await this.supabase.client.auth.getSession();
-    const hasSession = !!data.session;
-    this.auth.syncFromSession(hasSession);
-
-    if (hasSession && data.session?.user) {
-      const user = data.session.user;
-      const fullName =
-        (user.user_metadata?.['full_name'] as string | undefined) ||
-        (user.email ? user.email.split('@')[0] : '');
-      this.auth.setCurrentUser({
-        id: user.id,
-        email: user.email ?? '',
-        name: fullName,
-        phone: (user.user_metadata?.['phone'] as string | undefined) ?? '',
-      });
+    if (!this.auth.currentUser()) {
+      await this.authApi.restoreSession();
     }
 
     this.isAuthResolved.set(true);
   }
+
 
   private static resolveInitialMode(): SidebarMode {
     if (window.innerWidth <= ShellLayout.COMPACT_BREAKPOINT) return 'hidden';
