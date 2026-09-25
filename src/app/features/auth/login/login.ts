@@ -11,7 +11,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { AuthService } from '../../../core/services/auth.service';
-import { SupabaseService } from '../../../core/services/supabase.service';
+import { AuthApiService } from '../../../core/services/auth-api.service';
 
 @Component({
   selector: 'app-login',
@@ -29,7 +29,7 @@ export class Login {
   private readonly auth = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
-  private readonly supabase = inject(SupabaseService);
+  private readonly authApi = inject(AuthApiService);
   private introStartTimeoutId: number | null = null;
   private introTimeoutId: number | null = null;
 
@@ -106,28 +106,25 @@ export class Login {
     this.submitSuccess.set('');
 
     const { email, password } = this.loginForm.getRawValue();
-    const { data, error } = await this.supabase.client.auth.signInWithPassword({ email, password });
 
-    if (error) {
-      this.submitError.set('Check your email and password. Please try again.');
-      this.isSubmitting.set(false);
-      return;
-    }
+    try {
+      const response = await this.authApi.login(email, password);
 
-    this.auth.setAuthenticated(true);
-    if (data.user) {
-      const fullName =
-        (data.user.user_metadata?.['full_name'] as string | undefined) ||
-        (data.user.email ? data.user.email.split('@')[0] : '');
+      this.auth.setToken(response.token);
+      this.auth.setAuthenticated(true);
       this.auth.setCurrentUser({
-        id: data.user.id,
-        email: data.user.email ?? email,
-        name: fullName,
-        phone: (data.user.user_metadata?.['phone'] as string | undefined) ?? '',
+        id: String(response.user_id),
+        email: response.email,
+        name: response.full_name,
+        phone: '',
       });
+
+      await this.router.navigateByUrl(this.resolvePostLoginRoute());
+    } catch {
+      this.submitError.set('Check your email and password. Please try again.');
+    } finally {
+      this.isSubmitting.set(false);
     }
-    this.isSubmitting.set(false);
-    await this.router.navigateByUrl(this.resolvePostLoginRoute());
   }
 
   protected continueAsGuest(): void {
