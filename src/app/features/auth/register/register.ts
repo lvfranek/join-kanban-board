@@ -1,10 +1,10 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { TuiButton } from '@taiga-ui/core';
 
-import { AuthService } from '../../../core/services/auth.service';
-import { SupabaseService } from '../../../core/services/supabase.service';
+import { AuthApiService } from '../../../core/services/auth-api.service';
 
 @Component({
   selector: 'app-register',
@@ -15,8 +15,7 @@ import { SupabaseService } from '../../../core/services/supabase.service';
 })
 export class Register {
   private readonly router = inject(Router);
-  private readonly supabase = inject(SupabaseService);
-  private readonly auth = inject(AuthService);
+  private readonly authApi = inject(AuthApiService);
 
   protected readonly isSubmitting = signal(false);
   protected readonly submitError = signal('');
@@ -69,45 +68,27 @@ export class Register {
     this.submitError.set('');
     this.submitSuccess.set('');
 
-    const { fullName, email, password } = this.registerForm.getRawValue();
+    const { fullName, email, password, confirmPassword } = this.registerForm.getRawValue();
 
-    const { data, error } = await this.supabase.client.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-        },
-      },
-    });
-
-    if (error) {
-      this.submitError.set(error.message || 'Sign up failed. Please try again.');
+    try {
+      await this.authApi.register(fullName, email, password, confirmPassword);
+      await this.router.navigate(['/login'], {
+        queryParams: { registered: '1' },
+      });
+    } catch (err) {
+      this.submitError.set(this.readErrorMessage(err));
+    } finally {
       this.isSubmitting.set(false);
-      return;
     }
+  }
 
-    // Best-effort profile insert for projects that keep a users table.
-    if (data.user?.id) {
-      await this.supabase.client.from('users').upsert({
-        id: data.user.id,
-        email,
-        full_name: fullName,
-        role: 'user',
-      });
-
-      this.auth.setCurrentUser({
-        id: data.user.id,
-        email,
-        name: fullName,
-      });
+  private readErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse && err.status === 400) {
+      const errors = err.error as Record<string, string[] | string>;
+      const first = Object.values(errors)[0];
+      if (Array.isArray(first) && first.length) return first[0];
+      if (typeof first === 'string') return first;
     }
-
-    this.isSubmitting.set(false);
-    this.submitSuccess.set('You signed up successfully. Please log in.');
-
-    await this.router.navigate(['/login'], {
-      queryParams: { registered: '1' },
-    });
+    return 'Sign up failed. Please try again.';
   }
 }

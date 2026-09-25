@@ -27,6 +27,22 @@ export class AuthApiService {
         );
     }
 
+    register(
+        fullName: string,
+        email: string,
+        password: string,
+        repeatedPassword: string,
+    ): Promise<AuthResponse> {
+        return firstValueFrom(
+            this.http.post<AuthResponse>(`${this.baseUrl}/registration/`, {
+                full_name: fullName,
+                email,
+                password,
+                repeated_password: repeatedPassword,
+            }),
+        );
+    }
+
     me(): Promise<UserResponse> {
         return firstValueFrom(this.http.get<UserResponse>(`${this.baseUrl}/me/`));
     }
