@@ -1,8 +1,8 @@
 import { Component, ElementRef, HostListener, ViewChild, computed, inject } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 
+import { AuthApiService } from '../../../core/services/auth-api.service';
 import { AuthService } from '../../../core/services/auth.service';
-import { SupabaseService } from '../../../core/services/supabase.service';
 
 @Component({
   selector: 'app-header',
@@ -15,7 +15,7 @@ export class AppHeader {
 
   private readonly authService = inject(AuthService);
   private readonly router = inject(Router);
-  private readonly supabase = inject(SupabaseService);
+  private readonly authApi = inject(AuthApiService);
 
   protected readonly isAuthenticated = this.authService.isAuthenticated;
   private readonly displayName = computed(() => this.authService.currentUser()?.name ?? '');
@@ -30,26 +30,6 @@ export class AppHeader {
   });
 
   isProfileMenuOpen = false;
-
-  constructor() {
-    // Keep AuthService.currentUser in sync with the underlying Supabase session.
-    this.supabase.client.auth.onAuthStateChange((_event, session) => {
-      const user = session?.user ?? null;
-      if (!user) {
-        // Don't clear here on plain SIGNED_OUT events — logout flow handles it.
-        return;
-      }
-      const fullName =
-        (user.user_metadata?.['full_name'] as string | undefined) ||
-        (user.email ? user.email.split('@')[0] : '');
-      this.authService.setCurrentUser({
-        id: user.id,
-        email: user.email ?? '',
-        name: fullName,
-        phone: (user.user_metadata?.['phone'] as string | undefined) ?? '',
-      });
-    });
-  }
 
   @HostListener('document:click')
   closeProfileMenu(): void {
@@ -67,15 +47,9 @@ export class AppHeader {
   }
 
   async logout(): Promise<void> {
-    // Try Supabase sign-out first (no-op for guest sessions).
-    try {
-      await this.supabase.client.auth.signOut();
-    } catch (err) {
-      console.warn('Supabase sign-out failed', err);
-    }
-    // Central logout: clears guest flag, JWT token, current user, and notifies
-    // listeners (TaskService, ContactService) to invalidate their caches.
-    this.authService.logout();
+    // Central logout: deletes the token in Django, clears guest flag, token, current user,
+    // and notifies listeners (TaskService, ContactService) to invalidate their caches.
+    await this.authApi.logout();
     this.focusProfileButtonIfMenuHadFocus();
     this.isProfileMenuOpen = false;
     await this.router.navigate(['/login']);

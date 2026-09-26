@@ -32,7 +32,6 @@ export class Greeting implements OnInit, OnDestroy {
       return;
     }
 
-    await this.greeting.loadUserName();
     this.scheduleSummaryRedirect();
   }
 

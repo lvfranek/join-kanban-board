@@ -47,6 +47,6 @@ export class Summary implements OnInit {
   });
 
   async ngOnInit(): Promise<void> {
-    await Promise.all([this.greeting.loadUserName(), this.taskService.list()]);
+    await this.taskService.list();
   }
 }

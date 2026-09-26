@@ -1,33 +1,17 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, inject } from '@angular/core';
 
-import { SupabaseService } from './supabase.service';
+import { AuthService } from './auth.service';
 
 @Injectable({ providedIn: 'root' })
 export class UserGreetingService {
-  private readonly supabase = inject(SupabaseService);
-  private readonly displayName = signal('Guest');
+  private readonly auth = inject(AuthService);
 
-  readonly userName = this.displayName.asReadonly();
+  readonly userName = computed(() => {
+    const user = this.auth.currentUser();
+    if (!user) return 'Guest';
+    return this.asNonEmptyString(user.name) ?? this.extractNameFromEmail(user.email) ?? 'Guest';
+  });
   readonly greetingText = computed(() => this.resolveGreetingText(new Date()));
-
-  async loadUserName(): Promise<void> {
-    const { data } = await this.supabase.client.auth.getUser();
-    const user = data.user;
-
-    if (!user) {
-      this.displayName.set('Guest');
-      return;
-    }
-
-    const metadata = user.user_metadata ?? {};
-    const metadataName =
-      this.asNonEmptyString(metadata['full_name']) ??
-      this.asNonEmptyString(metadata['name']) ??
-      this.asNonEmptyString(metadata['display_name']);
-    const emailName = this.extractNameFromEmail(user.email);
-
-    this.displayName.set(metadataName ?? emailName ?? 'Guest');
-  }
 
   private resolveGreetingText(date: Date): string {
     const hour = date.getHours();

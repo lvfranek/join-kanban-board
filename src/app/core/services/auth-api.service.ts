@@ -43,6 +43,17 @@ export class AuthApiService {
         );
     }
 
+    async logout(): Promise<void> {
+        if (this.auth.getToken()) {
+            try {
+                await firstValueFrom(this.http.post(`${this.baseUrl}/logout/`, {}));
+            } catch {
+                // Token already invalid or server unreachable: log out locally anyway.
+            }
+        }
+        this.auth.logout();
+    }
+
     me(): Promise<UserResponse> {
         return firstValueFrom(this.http.get<UserResponse>(`${this.baseUrl}/me/`));
     }

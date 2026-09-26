@@ -14,7 +14,6 @@ import { filter } from 'rxjs/operators';
 import { AuthService } from '../../core/services/auth.service';
 import { AuthApiService } from '../../core/services/auth-api.service';
 import { ContactService } from '../../core/services/contact.service';
-import { SupabaseService } from '../../core/services/supabase.service';
 import { TaskService } from '../../core/services/task.service';
 import { AppHeader } from '../../shared/components/app-header/app-header';
 import { Sidebar } from '../../shared/components/sidebar/sidebar';
@@ -50,7 +49,6 @@ export class ShellLayout implements OnDestroy {
   protected readonly router = inject(Router);
   private readonly auth = inject(AuthService);
   private readonly authApi = inject(AuthApiService);
-  private readonly supabase = inject(SupabaseService);
   private readonly contactService = inject(ContactService);
   private readonly taskService = inject(TaskService);
   private readonly viewportWidth = signal(window.innerWidth);
@@ -256,11 +254,7 @@ export class ShellLayout implements OnDestroy {
       return;
     }
 
-    if (!this.auth.isGuest()) {
-      await this.supabase.client.auth.signOut();
-    }
-
-    this.auth.logout();
+    await this.authApi.logout();
     this.contactService.invalidate();
     this.taskService.invalidate();
     await this.router.navigate(['/login']);
