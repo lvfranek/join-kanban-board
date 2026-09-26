@@ -94,7 +94,7 @@ export class Contacts implements OnInit {
     try {
       await this.contactService.list();
     } catch (error) {
-      console.error('Failed to load contacts from Supabase', error);
+      console.error('Failed to load contacts', error);
     }
   }
 

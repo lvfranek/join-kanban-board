@@ -1,6 +1,8 @@
+import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 
-import { SupabaseService } from '../../../core/services/supabase.service';
 import { Summary } from './summary';
 
 describe('Summary', () => {
@@ -10,27 +12,7 @@ describe('Summary', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Summary],
-      providers: [
-        {
-          provide: SupabaseService,
-          useValue: {
-            client: {
-              auth: {
-                getUser: async () => ({
-                  data: {
-                    user: {
-                      email: 'sofia.mueller@example.com',
-                      user_metadata: {
-                        full_name: 'Sofia Mueller',
-                      },
-                    },
-                  },
-                }),
-              },
-            },
-          },
-        },
-      ],
+      providers: [provideHttpClient(), provideHttpClientTesting(), provideRouter([])],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Summary);

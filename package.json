@@ -19,7 +19,6 @@
     "@angular/forms": "^21.2.0",
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
-    "@supabase/supabase-js": "^2.104.1",
     "@taiga-ui/addon-mobile": "^5.3.0",
     "@taiga-ui/addon-table": "^5.3.0",
     "@taiga-ui/cdk": "^5.3.0",
