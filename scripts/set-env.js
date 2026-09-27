@@ -20,7 +20,7 @@ if (fs.existsSync(envPath)) {
 }
 
 // Merge process.env so environment variables from the build machine take precedence
-const get = (key) => env[key] ?? process.env[key] ?? '';
+const get = (key) => process.env[key] ?? env[key] ?? '';
 
 const apiUrl = get('API_URL') || 'http://127.0.0.1:8000/api';
 
