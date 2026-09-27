@@ -124,13 +124,11 @@ npm test
 
 ## Deployment
 
-The app is built as static files and served by Nginx on a Google Cloud VM, next to the Django backend.
+The frontend is deployed on Vercel at [join.franekkaminski.dev](https://join.franekkaminski.dev). Every push to `main` triggers a new build.
 
-```bash
-API_URL=https://join-api.franekkaminski.dev/api npm run build
-```
+Set `API_URL` in the Vercel project settings (for example `https://join-api.franekkaminski.dev/api`). `scripts/set-env.js` reads it from the build environment, and it takes priority over a local `.env` file. Vercel builds with `npm run build` and serves `dist/demo-join/browser`.
 
-The output in `dist/demo-join/browser` is served as a single-page app, with every unknown path falling back to `index.html`.
+The backend runs separately on a Google Cloud VM, see the [backend README](https://github.com/lvfranek/join-backend#deployment).
 
 ## License
 
