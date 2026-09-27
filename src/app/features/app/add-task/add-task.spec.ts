@@ -54,7 +54,7 @@ describe('AddTask', () => {
   it('should create a task with the provided initial status', () => {
     component.initialStatus = 'inProgress';
     component.updateField('title', 'Column task');
-    component.updateField('dueDate', '2026-05-05');
+    component.updateField('dueDate', component.minDueDate);
     component.updateField('category', 'Technical Task');
 
     component.createTask();

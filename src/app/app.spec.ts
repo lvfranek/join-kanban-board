@@ -1,10 +1,27 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
+import { provideTaiga } from '@taiga-ui/core';
+
 import { App } from './app';
 
 describe('App', () => {
   beforeEach(async () => {
+    // jsdom has no matchMedia, but Taiga's tui-root needs it.
+    window.matchMedia ??= (query: string) =>
+      ({
+        matches: false,
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }) as MediaQueryList;
+
     await TestBed.configureTestingModule({
       imports: [App],
+      providers: [provideRouter([]), provideTaiga()],
     }).compileComponents();
   });
 
@@ -14,10 +31,10 @@ describe('App', () => {
     expect(app).toBeTruthy();
   });
 
-  it('should render title', async () => {
+  it('should render the router outlet inside the Taiga root', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain('Hello, demo-join');
+    expect(compiled.querySelector('tui-root router-outlet')).not.toBeNull();
   });
 });
