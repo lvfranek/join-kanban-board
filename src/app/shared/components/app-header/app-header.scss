@@ -166,6 +166,28 @@
   display: none;
 }
 
+.app-header__login {
+  display: none;
+  align-items: center;
+  block-size: 40px;
+  padding-inline: 1rem;
+  border-radius: 8px;
+  background: var(--brand-primary-500);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+
+  &:hover {
+    background: #091931;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-2);
+    outline-offset: 2px;
+  }
+}
+
 @media (max-width: 1024px) {
   .app-header {
     padding-inline: 1rem;
@@ -194,5 +216,9 @@
     block-size: 40px;
     border-width: 2px;
     font-size: 14px;
+  }
+
+  .app-header__login {
+    display: flex;
   }
 }
